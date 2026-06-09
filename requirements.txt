@@ -1,0 +1,21 @@
+# Bangla OCR — Requirements (agent.md compliant)
+# Python 3.11 | CPU-only TensorFlow | No unnecessary packages
+
+# Core ML
+tensorflow==2.16.1
+numpy==1.26.4
+scikit-learn==1.4.2
+
+# Image processing
+Pillow==10.3.0
+opencv-python-headless==4.9.0.80
+
+# MLOps
+mlflow==2.13.0
+
+# UI
+streamlit==1.35.0
+streamlit-drawable-canvas==0.9.3
+
+# Plotting (training curves → MLflow artifacts)
+matplotlib==3.8.4

@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+mlruns/
+artifacts/mlflow/
+BanglaLekha-Isolated/
+screenshots/
+*.ipynb
+*.zip
+.git/
