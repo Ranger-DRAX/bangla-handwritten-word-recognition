@@ -3,11 +3,12 @@ app.py — Bangla Handwritten Word Recognition (Streamlit UI)
 Draw a Bangla word on the canvas → each character is segmented & predicted.
 """
 
-import os, json, pathlib
+import os
+import json
+import pathlib
 import numpy as np
 import streamlit as st
-from PIL import Image, ImageOps, ImageFilter
-import cv2
+from PIL import Image, ImageOps
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -136,6 +137,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # ── Lazy imports so Streamlit starts fast ────────────────────────────────────
 @st.cache_resource(show_spinner="Loading TensorFlow model…")
 def load_model_and_labels():
@@ -151,7 +153,7 @@ def load_model_and_labels():
         st.error("❌  `labels.json` not found. Please run `python train.py` first.")
         st.stop()
 
-    model  = tf.keras.models.load_model(str(model_path))
+    model = tf.keras.models.load_model(str(model_path))
     with open(labels_path, "r", encoding="utf-8") as f:
         labels = json.load(f)   # {str_index: bangla_char}
 
@@ -164,9 +166,13 @@ def segment_characters(canvas_array: np.ndarray, min_area: int = 80):
     Given an RGBA canvas image (numpy uint8), return a list of
     cropped grayscale character images sorted left-to-right.
     """
-    # Convert to BGR, then to grayscale
-    bgr  = cv2.cvtColor(canvas_array, cv2.COLOR_RGBA2BGR)
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    import cv2
+    
+    # Convert RGBA to grayscale with a solid white background using alpha compositing
+    rgba_img = Image.fromarray(canvas_array)
+    white_bg = Image.new("RGBA", rgba_img.size, (255, 255, 255, 255))
+    composite = Image.alpha_composite(white_bg, rgba_img).convert("L")
+    gray = np.array(composite)
 
     # Invert so characters are white on black (threshold expects that)
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -192,11 +198,15 @@ def segment_characters(canvas_array: np.ndarray, min_area: int = 80):
     chars = []
     for (x, y, w, h) in bboxes:
         roi = gray[y: y + h, x: x + w]
-        # Pad to square
-        sz  = max(w, h) + 8
-        pad = Image.fromarray(roi)
-        pad = ImageOps.expand(pad, border=(sz - w) // 2, fill=255)
-        pad = pad.resize((64, 64), Image.LANCZOS)
+        
+        # Perfect square centering padding (handles w != h accurately)
+        sz = max(w, h) + 16
+        square = Image.new("L", (sz, sz), 255)
+        x_offset = (sz - w) // 2
+        y_offset = (sz - h) // 2
+        square.paste(Image.fromarray(roi), (x_offset, y_offset))
+        
+        pad = square.resize((64, 64), Image.Resampling.LANCZOS)
         chars.append((np.array(pad), (x, y, w, h)))
 
     return chars
@@ -300,7 +310,7 @@ try:
                         probs = model.predict(inp, verbose=0)[0]
                         top1  = int(np.argmax(probs))
                         conf  = float(probs[top1])
-                        char  = labels[str(top1)]
+                        char  = labels.get(str(top1), "?")
                         char_predictions.append({
                             "char":  char,
                             "conf":  conf,
@@ -355,7 +365,7 @@ try:
                         for i, pred in enumerate(char_predictions):
                             top3_idx  = np.argsort(pred["probs"])[::-1][:3]
                             top3_data = [
-                                (labels[str(idx)], pred["probs"][idx])
+                                (labels.get(str(idx), "?"), pred["probs"][idx])
                                 for idx in top3_idx
                             ]
                             st.markdown(f"**Character {i+1}:**")
@@ -379,7 +389,7 @@ try:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Input Size",  "64 × 64")
     c2.metric("Channels",    "Grayscale (1)")
-    c3.metric("Classes",     "84")
+    c3.metric("Classes",     f"{len(labels)}")
     c4.metric("Framework",   "TensorFlow/Keras")
 
 except ImportError:
